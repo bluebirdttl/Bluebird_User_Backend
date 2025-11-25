@@ -194,7 +194,11 @@ export const updateEmployee = async (req, res) => {
     }
 
     // set updated_at
-    // updated_at: new Date().toISOString(), // Commented out to debug 500 error (column might be missing)
+    // set updated_at
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(now.getTime() + istOffset);
+    updatePayload.updated_at = istDate.toISOString();
 
     // perform update
     const { data: updatedData, error: updateError } = await supabase
