@@ -300,7 +300,9 @@ export const getDashboardMetrics = async (req, res) => {
     const metrics = {
       partialHoursDistribution: {},
       clusters: { "MEBM": 0, "M&T": 0, "S&PS Insitu": 0, "S&PS Exsitu": 0 },
-      roles: {}
+      roles: {},
+      totalPartialHours: 0,
+      totalAvailableHours: 0
     };
 
     employees.forEach(emp => {
@@ -325,7 +327,22 @@ export const getDashboardMetrics = async (req, res) => {
       // 3. Roles
       const r = (emp.role || "Unknown").trim();
       metrics.roles[r] = (metrics.roles[r] || 0) + 1;
+
+      // 4. Total Capacity Calculation
+      const avail = (emp.availability || "").toLowerCase();
+      // console.log(`Emp: ${emp.cluster} | Avail: ${emp.availability} | Hours: ${emp.hours_available}`);
+
+      if (avail === "partially available" && emp.hours_available) {
+        const h = parseFloat(emp.hours_available);
+        if (!isNaN(h)) {
+          metrics.totalPartialHours = (metrics.totalPartialHours || 0) + h;
+        }
+      } else if (avail === "available") {
+        // Assuming 8 hours/day for full availability
+        metrics.totalAvailableHours = (metrics.totalAvailableHours || 0) + 8;
+      }
     });
+    // console.log("Calculated Metrics:", metrics);
 
     res.json(metrics);
   } catch (err) {
