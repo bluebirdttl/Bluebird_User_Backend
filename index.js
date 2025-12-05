@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import employeeRoutes from './routes/employeeRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
-// import sheetDB from "./db/connection.js";
 
 dotenv.config();
 
@@ -16,9 +15,7 @@ const app = express();
 app.use(cors({
     origin: [
         'https://bluebird-star-app.vercel.app',
-        'https://bluebird-user-backend.vercel.app',
-        'http://localhost:3000',
-        'http://localhost:5000'
+        'https://bluebird-user-backend.vercel.app'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     credentials: true
