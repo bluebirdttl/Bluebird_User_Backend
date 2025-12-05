@@ -292,7 +292,7 @@ export const getDashboardMetrics = async (req, res) => {
     // Fetch only necessary fields to minimize data transfer
     const { data: employees, error } = await supabase
       .from('employees')
-      .select('cluster, role, availability, hours_available');
+      .select('cluster, cluster2, role, availability, hours_available');
 
     if (error) throw error;
 
@@ -312,17 +312,23 @@ export const getDashboardMetrics = async (req, res) => {
         metrics.partialHoursDistribution[label] = (metrics.partialHoursDistribution[label] || 0) + 1;
       }
 
-      // 2. Clusters
-      const empCluster = (emp.cluster || "").trim();
-      if (metrics.clusters.hasOwnProperty(empCluster)) {
-        metrics.clusters[empCluster]++;
-      } else if (empCluster) {
-        // Case-insensitive match
-        const key = Object.keys(metrics.clusters).find(k => k.toLowerCase() === empCluster.toLowerCase());
-        if (key) {
-          metrics.clusters[key]++;
+      // 2. Clusters (Check both cluster and cluster2)
+      const clustersToCheck = [emp.cluster, emp.cluster2];
+
+      clustersToCheck.forEach(c => {
+        const empCluster = (c || "").trim();
+        if (!empCluster) return;
+
+        if (metrics.clusters.hasOwnProperty(empCluster)) {
+          metrics.clusters[empCluster]++;
+        } else {
+          // Case-insensitive match
+          const key = Object.keys(metrics.clusters).find(k => k.toLowerCase() === empCluster.toLowerCase());
+          if (key) {
+            metrics.clusters[key]++;
+          }
         }
-      }
+      });
 
       // 3. Roles
       const r = (emp.role || "Unknown").trim();
