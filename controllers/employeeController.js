@@ -304,6 +304,7 @@ export const getDashboardMetrics = async (req, res) => {
       const year = now.getFullYear();
       const month = now.getMonth(); // 0-indexed
       const todayDay = now.getDay(); // 0=Sun, 6=Sat
+      const todayDate = now.getDate();
 
       if (!rangeType || rangeType === "All" || rangeType === "Daily") {
         // If today is Sat(6) or Sun(0), working days = 0. Else 1.
@@ -311,15 +312,50 @@ export const getDashboardMetrics = async (req, res) => {
       }
 
       if (rangeType === "Weekly") {
-        // Standard work week = 5 days
-        return 5;
+        // Remaining days in current week (Today -> Sunday)
+        // todayDay: 0(Sun) ... 6(Sat).
+        // If today is Sunday(0), remaining is just Today (0->0 loops once? No, week usually ends Sunday).
+        // Let's assume week ends Sunday.
+        // Days to check: Today ... Sunday.
+        // distance to Sunday: if today is 1(Mon), need to check Mon, Tue, Wed, Thu, Fri, Sat, Sun.
+        // Actually simpler: iterate from Today's date until we hit a Sunday (or just count 7 - (day==0?7:day) + 1 days).
+        // But better to just loop dates to be safe about month rollover? No, "Weekly" usually means "This Week".
+        // Let's assume standard ISO week Monday-Sunday.
+        // If today is Mon(1), days left: 1,2,3,4,5,6,0.
+        // If today is Fri(5), days left: 5,6,0.
+
+        let workingDays = 0;
+        // Iterate from 0 to (days until Sunday).
+        // Javascript getDay(): Sun=0, Mon=1, ... Sat=6.
+        // Days until next Sunday (inclusive): 
+        // If today=0(Sun), 0 days left after today? Or just today? "Rest of the week" includes today.
+        // If today=1(Mon), Mon...Sun = 7 days.
+        // If today=6(Sat), Sat...Sun = 2 days.
+
+        // Easier loop:
+        // Current date object 'current'. Loop while current.getDay() != 1 (next Monday) -- wait, that might cross weeks excessively if logic is wrong.
+        // Let's just do defined loop for specific count.
+        // Target is Sunday (0).
+        // If today is Sunday(0), we check just today.
+
+        const current = new Date(now);
+        // Safety break: 8 days max
+        for (let i = 0; i < 8; i++) {
+          const d = current.getDay();
+          if (d !== 0 && d !== 6) workingDays++;
+          if (d === 0) break; // Reached Sunday, stop.
+          current.setDate(current.getDate() + 1);
+        }
+        return workingDays;
       }
 
       if (rangeType === "Monthly") {
-        // Count Mon-Fri in current month
+        // Count Mon-Fri from Today to end of current month
         let workingDays = 0;
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        for (let d = 1; d <= daysInMonth; d++) {
+        const daysInMonth = new Date(year, month + 1, 0).getDate(); // Last day of month
+
+        // Loop from todayDate to daysInMonth
+        for (let d = todayDate; d <= daysInMonth; d++) {
           const date = new Date(year, month, d);
           const day = date.getDay();
           if (day !== 0 && day !== 6) {
