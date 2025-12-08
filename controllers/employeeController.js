@@ -289,12 +289,50 @@ export const updateEmployeeStars = async (req, res) => {
 export const getDashboardMetrics = async (req, res) => {
   // console.log("getDashboardMetrics HIT!");
   try {
+    const range = (req.query.range || "").trim(); // "Daily", "Weekly", "Monthly", "All"
+
     // Fetch only necessary fields to minimize data transfer
     const { data: employees, error } = await supabase
       .from('employees')
       .select('cluster, cluster2, role, availability, hours_available');
 
     if (error) throw error;
+
+    // Helper to calculate working days (Mon-Fri) based on range
+    const getWorkingDaysCount = (rangeType) => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth(); // 0-indexed
+      const todayDay = now.getDay(); // 0=Sun, 6=Sat
+
+      if (!rangeType || rangeType === "All" || rangeType === "Daily") {
+        // If today is Sat(6) or Sun(0), working days = 0. Else 1.
+        return (todayDay === 0 || todayDay === 6) ? 0 : 1;
+      }
+
+      if (rangeType === "Weekly") {
+        // Standard work week = 5 days
+        return 5;
+      }
+
+      if (rangeType === "Monthly") {
+        // Count Mon-Fri in current month
+        let workingDays = 0;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+          const date = new Date(year, month, d);
+          const day = date.getDay();
+          if (day !== 0 && day !== 6) {
+            workingDays++;
+          }
+        }
+        return workingDays;
+      }
+
+      return 1; // Fallback
+    };
+
+    const multiplier = getWorkingDaysCount(range);
 
     // Initialize metrics
     const metrics = {
@@ -336,16 +374,19 @@ export const getDashboardMetrics = async (req, res) => {
 
       // 4. Total Capacity Calculation
       const avail = (emp.availability || "").toLowerCase();
-      // console.log(`Emp: ${emp.cluster} | Avail: ${emp.availability} | Hours: ${emp.hours_available}`);
 
+      // Calculate Base Daily Hours
+      let dailyHours = 0;
       if (avail === "partially available" && emp.hours_available) {
         const h = parseFloat(emp.hours_available);
         if (!isNaN(h)) {
-          metrics.totalPartialHours = (metrics.totalPartialHours || 0) + h;
+          dailyHours = h;
+          metrics.totalPartialHours = (metrics.totalPartialHours || 0) + (dailyHours * multiplier);
         }
       } else if (avail === "available") {
         // Assuming 8 hours/day for full availability
-        metrics.totalAvailableHours = (metrics.totalAvailableHours || 0) + 8;
+        dailyHours = 8;
+        metrics.totalAvailableHours = (metrics.totalAvailableHours || 0) + (dailyHours * multiplier);
       }
     });
     // console.log("Calculated Metrics:", metrics);
