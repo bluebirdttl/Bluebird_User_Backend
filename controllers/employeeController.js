@@ -376,7 +376,9 @@ export const getDashboardMetrics = async (req, res) => {
       clusters: { "MEBM": 0, "M&T": 0, "S&PS Insitu": 0, "S&PS Exsitu": 0 },
       roles: {},
       totalPartialHours: 0,
-      totalAvailableHours: 0
+      totalAvailableHours: 0,
+      partialEmployeeCount: 0,
+      availableEmployeeCount: 0
     };
 
     employees.forEach(emp => {
@@ -418,11 +420,13 @@ export const getDashboardMetrics = async (req, res) => {
         if (!isNaN(h)) {
           dailyHours = h;
           metrics.totalPartialHours = (metrics.totalPartialHours || 0) + (dailyHours * multiplier);
+          metrics.partialEmployeeCount++;
         }
       } else if (avail === "available") {
         // Assuming 8 hours/day for full availability
         dailyHours = 8;
         metrics.totalAvailableHours = (metrics.totalAvailableHours || 0) + (dailyHours * multiplier);
+        metrics.availableEmployeeCount++;
       }
     });
     // console.log("Calculated Metrics:", metrics);
