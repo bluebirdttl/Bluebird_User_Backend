@@ -14,7 +14,7 @@ const app = express();
 // -----------------------------
 app.use(cors({
     origin: [
-        'https://bluebird-user-frontend.vercel.app',
+        'https://bluebird-star-app.vercel.app',
         'https://bluebird-user-backend.vercel.app'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
