@@ -1,16 +1,38 @@
 import supabase from '../db/supabaseClient.js';
 
 // Get all projects
+// Get all projects with Creator Name manually mapped
 export const getProjects = async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const { data: projects, error } = await supabase
             .from('projects')
             .select('*')
             .order('id', { ascending: false });
 
         if (error) throw error;
 
-        res.status(200).json(data);
+        // Manual Join: Fetch creator names for these empids
+        // This avoids Foreign Key errors if constraints aren't set up
+        const empids = [...new Set(projects.map(p => p.empid).filter(id => id))];
+
+        let creatorMap = {};
+        if (empids.length > 0) {
+            const { data: employees, error: empError } = await supabase
+                .from('employees')
+                .select('empid, name')
+                .in('empid', empids);
+
+            if (!empError && employees) {
+                employees.forEach(e => creatorMap[e.empid] = e.name);
+            }
+        }
+
+        const enrichedData = projects.map(p => ({
+            ...p,
+            creator_name: creatorMap[p.empid] || "Unknown"
+        }));
+
+        res.status(200).json(enrichedData);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -19,15 +41,22 @@ export const getProjects = async (req, res) => {
 // Create a new project
 export const createProject = async (req, res) => {
     try {
-        const {
+        let {
             empid,
             project_name,
             leader_name,
             required_skills,
             end_date,
             status,
-            description
+            description,
+            poc1,
+            poc2,
+            poc3
         } = req.body;
+
+
+
+
 
         // Ensure required_skills is an array (Supabase handles JSONB automatically if passed as array/object)
         let skillsArray = [];
@@ -47,7 +76,10 @@ export const createProject = async (req, res) => {
                     required_skills: skillsArray,
                     end_date,
                     status,
-                    description
+                    description,
+                    poc1,
+                    poc2,
+                    poc3
                 }
             ])
             .select();
@@ -86,14 +118,32 @@ export const updateProjectStatus = async (req, res) => {
 export const updateProject = async (req, res) => {
     try {
         const { id } = req.params;
-        const {
+        let {
+            user_empid,
             project_name,
             leader_name,
             required_skills,
             end_date,
             status,
-            description
+            description,
+            poc1,
+            poc2,
+            poc3
         } = req.body;
+
+        // Verify Ownership
+        const { data: existing } = await supabase
+            .from('projects')
+            .select('empid')
+            .eq('id', id)
+            .single();
+
+        if (existing) {
+            // If user_empid is provided, verify it matches
+            if (user_empid && String(existing.empid) !== String(user_empid)) {
+                return res.status(403).json({ error: "Unauthorized: Only the creator can edit this activity." });
+            }
+        }
 
         // Ensure required_skills is an array
         let skillsArray = [];
@@ -103,16 +153,21 @@ export const updateProject = async (req, res) => {
             skillsArray = required_skills.split(',').map(s => s.trim()).filter(s => s);
         }
 
+        const updatePayload = {
+            project_name,
+            leader_name,
+            required_skills: skillsArray,
+            end_date,
+            status,
+            description,
+            poc1,
+            poc2,
+            poc3
+        }
+
         const { data, error } = await supabase
             .from('projects')
-            .update({
-                project_name,
-                leader_name,
-                required_skills: skillsArray,
-                end_date,
-                status,
-                description
-            })
+            .update(updatePayload)
             .eq('id', id)
             .select();
 
@@ -129,6 +184,20 @@ export const updateProject = async (req, res) => {
 export const deleteProject = async (req, res) => {
     try {
         const { id } = req.params;
+        const { user_empid } = req.body;
+
+        // Verify Ownership
+        const { data: existing } = await supabase
+            .from('projects')
+            .select('empid')
+            .eq('id', id)
+            .single();
+
+        if (existing) {
+            if (user_empid && String(existing.empid) !== String(user_empid)) {
+                return res.status(403).json({ error: "Unauthorized: Only the creator can delete this activity." });
+            }
+        }
 
         const { error } = await supabase
             .from('projects')
