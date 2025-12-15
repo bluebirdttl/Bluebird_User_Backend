@@ -14,8 +14,8 @@ const app = express();
 // -----------------------------
 app.use(cors({
     origin: [
-        'http://localhost:3000',
-        'http://localhost:5000'
+        'https://bluebird-star-app.vercel.app',
+        'https://bluebird-user-backend.vercel.app'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     credentials: true
