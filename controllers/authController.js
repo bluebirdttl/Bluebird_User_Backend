@@ -1,4 +1,5 @@
 import supabase from "../db/supabaseClient.js";
+import { sendNotificationToUser } from "./notificationController.js";
 
 // ---------------------------
 // LOGIN USER
@@ -34,6 +35,14 @@ export const loginUser = async (req, res) => {
       role_type: user.role_type,
       ...user // DEBUG: Include ALL fields to see what Supabase is actually returning
     };
+
+    // Send Notification
+    // console.log("Sending Login Notification to", user.empid);
+    sendNotificationToUser(user.empid, {
+      title: "New Login Detected",
+      message: `Login detected for ${user.email} at ${new Date().toLocaleTimeString()}`,
+      url: "/"
+    });
 
     res.json({ success: true, user: safeUser });
 
@@ -130,6 +139,13 @@ export const updatePassword = async (req, res) => {
       .eq('empid', empid);
 
     if (updateError) throw updateError;
+
+    // Send Notification
+    sendNotificationToUser(empid, {
+      title: "Password Changed",
+      message: "Your password has been successfully updated.",
+      url: "/profile"
+    });
 
     res.json({ success: true, message: "Password updated successfully" });
   } catch (err) {

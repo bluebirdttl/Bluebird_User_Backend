@@ -1,5 +1,5 @@
-// Backend/controllers/employeeController.js
 import supabase from "../db/supabaseClient.js";
+import { sendNotificationToUser } from "./notificationController.js";
 
 /**
  * Utilities
@@ -253,6 +253,13 @@ export const updateEmployee = async (req, res) => {
     }
 
     res.json({ success: true, message: "Employee updated", data: updatedRow || null });
+
+    // Send Notification
+    sendNotificationToUser(empid, {
+      title: "Profile Updated",
+      message: "Your profile details have been successfully updated.",
+      url: "/profile"
+    });
   } catch (err) {
     console.error("Update employee error →", err);
     res.status(500).json({ error: "Supabase update error", details: err.message || err });

@@ -13,6 +13,7 @@ This is the backend server for the PWA system, built with Node.js and Express. I
   - `dotenv` for environment variable management
   - `cors` for Cross-Origin Resource Sharing
   - `axios` for making HTTP requests
+  - `web-push` for handling VAPID Push Notifications
 
 ## 📂 Project Structure
 
@@ -42,6 +43,9 @@ tata_pwa_modified_backend/
     ```env
     PORT=5000
     # Add other necessary variables here
+    VAPID_PUBLIC_KEY=your_public_key
+    VAPID_PRIVATE_KEY=your_private_key
+    VAPID_MAILTO=mailto:admin@example.com
     ```
 5.  **Start the server:**
     ```bash

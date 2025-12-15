@@ -1,4 +1,5 @@
 import supabase from '../db/supabaseClient.js';
+import { broadcastNotification } from './notificationController.js';
 
 // Get all projects
 // Get all projects with Creator Name manually mapped
@@ -87,6 +88,15 @@ export const createProject = async (req, res) => {
         if (error) throw error;
 
         res.status(201).json(data[0]);
+
+        // Broadcast Notification to all ICs (Non-Managers)
+        // We assume "IC" or empty role_type implies non-manager.
+        // broadcastNotification will handle fetching appropriate users.
+        broadcastNotification("IC", {
+            title: "New Activity Available",
+            message: `A new activity "${project_name}" has been posted. Check it out!`,
+            url: "/inline-activities"
+        });
     } catch (error) {
         console.error("Error creating project:", error);
         res.status(500).json({ error: error.message });
