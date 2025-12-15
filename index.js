@@ -60,6 +60,10 @@ app.listen(PORT, () =>
     console.log(`Backend running on port ${PORT}`)
 );
 
+// Start Scheduler
+import startScheduler from './scheduler.js';
+startScheduler();
+
 // TEST ROUTE TO CHECK SHEETDB CONNECTION
 app.get("/test-db", async (req, res) => {
     try {

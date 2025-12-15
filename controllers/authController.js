@@ -44,6 +44,9 @@ export const loginUser = async (req, res) => {
       url: "/"
     });
 
+    // Update last_login
+    await supabase.from('employees').update({ last_login: new Date().toISOString() }).eq('empid', user.empid);
+
     res.json({ success: true, user: safeUser });
 
   } catch (err) {
