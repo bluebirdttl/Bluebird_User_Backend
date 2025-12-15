@@ -46,7 +46,7 @@ const startScheduler = () => {
                         title: "Update Your Details",
                         message: "It's been 15 days! Please update your Skills and Availability in the Details screen.",
                         url: "/details",
-                        icon: '/Logo/taking-off.png',
+                        icon: '/Logo/MainLogo.png',
                         image: '/Logo/MainLogo.png'
                     });
                     count++;
