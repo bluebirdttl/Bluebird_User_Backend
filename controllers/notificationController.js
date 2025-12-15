@@ -82,7 +82,7 @@ export const subscribe = async (req, res) => {
 export const sendNotificationToUser = async (empid, payload) => {
     try {
         // Default Icon
-        if (!payload.icon) payload.icon = '/Logo/taking-off.png';
+        if (!payload.icon) payload.icon = '/Logo/MainLogo.png';
         if (!payload.image) payload.image = '/Logo/MainLogo.png'; // Show vivid logo as main image
 
         // 1. Fetch user subscriptions
@@ -130,7 +130,7 @@ export const sendNotificationToUser = async (empid, payload) => {
 export const broadcastNotification = async (roleType, payload) => {
     try {
         // Default Icon
-        if (!payload.icon) payload.icon = '/Logo/taking-off.png';
+        if (!payload.icon) payload.icon = '/Logo/MainLogo.png';
         if (!payload.image) payload.image = '/Logo/MainLogo.png';
 
         // Fetch all users with role_type (case insensitive ideally, or just exact)
