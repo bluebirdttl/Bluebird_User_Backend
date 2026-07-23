@@ -296,108 +296,155 @@ export const updateEmployeeStars = async (req, res) => {
 export const getDashboardMetrics = async (req, res) => {
   // console.log("getDashboardMetrics HIT!");
   try {
-    const range = (req.query.range || "").trim(); // "Daily", "Weekly", "Monthly", "All"
-
-    // Fetch only necessary fields to minimize data transfer
+    // Fetch fields including from_date and to_date
     const { data: employees, error } = await supabase
       .from('employees')
-      .select('cluster, cluster2, role, availability, hours_available');
+      .select('cluster, cluster2, role, availability, hours_available, from_date, to_date');
 
     if (error) throw error;
 
-    // Helper to calculate working days (Mon-Fri) based on range
-    const getWorkingDaysCount = (rangeType) => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth(); // 0-indexed
-      const todayDay = now.getDay(); // 0=Sun, 6=Sat
-      const todayDate = now.getDate();
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-      if (!rangeType || rangeType === "All" || rangeType === "Daily") {
-        // If today is Sat(6) or Sun(0), working days = 0. Else 1.
-        return (todayDay === 0 || todayDay === 6) ? 0 : 1;
+    // 1. Today window: [today, today]
+    const todayStart = new Date(now);
+    const todayEnd = new Date(now);
+
+    // 2. Weekly window: [today, end of current week (Sunday)]
+    const weekStart = new Date(now);
+    const weekEnd = new Date(now);
+    while (weekEnd.getDay() !== 0) {
+      weekEnd.setDate(weekEnd.getDate() + 1);
+    }
+
+    // 3. Monthly window: [today, last day of current month]
+    const monthStart = new Date(now);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // Helper to robustly parse date strings in YYYY-MM-DD, DD/MM/YYYY, or DD/MM/YY formats
+    const parseDate = (dStr) => {
+      if (!dStr) return null;
+      if (dStr instanceof Date) return isNaN(dStr.getTime()) ? null : dStr;
+      const s = String(dStr).trim();
+      if (!s) return null;
+
+      // Check standard ISO / YYYY-MM-DD format first
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d;
       }
 
-      if (rangeType === "Weekly") {
-        // Remaining days in current week (Today -> Sunday)
-        // todayDay: 0(Sun) ... 6(Sat).
-        // If today is Sunday(0), remaining is just Today (0->0 loops once? No, week usually ends Sunday).
-        // Let's assume week ends Sunday.
-        // Days to check: Today ... Sunday.
-        // distance to Sunday: if today is 1(Mon), need to check Mon, Tue, Wed, Thu, Fri, Sat, Sun.
-        // Actually simpler: iterate from Today's date until we hit a Sunday (or just count 7 - (day==0?7:day) + 1 days).
-        // But better to just loop dates to be safe about month rollover? No, "Weekly" usually means "This Week".
-        // Let's assume standard ISO week Monday-Sunday.
-        // If today is Mon(1), days left: 1,2,3,4,5,6,0.
-        // If today is Fri(5), days left: 5,6,0.
+      // Handle DD/MM/YYYY, DD/MM/YY, DD-MM-YYYY formats
+      const parts = s.split(/[\/\-\.]/);
+      if (parts.length === 3) {
+        let p1 = parseInt(parts[0], 10);
+        let p2 = parseInt(parts[1], 10);
+        let p3 = parseInt(parts[2], 10);
 
-        let workingDays = 0;
-        // Iterate from 0 to (days until Sunday).
-        // Javascript getDay(): Sun=0, Mon=1, ... Sat=6.
-        // Days until next Sunday (inclusive): 
-        // If today=0(Sun), 0 days left after today? Or just today? "Rest of the week" includes today.
-        // If today=1(Mon), Mon...Sun = 7 days.
-        // If today=6(Sat), Sat...Sun = 2 days.
-
-        // Easier loop:
-        // Current date object 'current'. Loop while current.getDay() != 1 (next Monday) -- wait, that might cross weeks excessively if logic is wrong.
-        // Let's just do defined loop for specific count.
-        // Target is Sunday (0).
-        // If today is Sunday(0), we check just today.
-
-        const current = new Date(now);
-        // Safety break: 8 days max
-        for (let i = 0; i < 8; i++) {
-          const d = current.getDay();
-          if (d !== 0 && d !== 6) workingDays++;
-          if (d === 0) break; // Reached Sunday, stop.
-          current.setDate(current.getDate() + 1);
+        if (p1 > 1000) {
+          // YYYY-MM-DD
+          const d = new Date(p1, p2 - 1, p3);
+          if (!isNaN(d.getTime())) return d;
+        } else if (p3 > 0) {
+          // DD/MM/YYYY or DD/MM/YY
+          let year = p3 < 100 ? p3 + 2000 : p3;
+          let month = p2 - 1;
+          let day = p1;
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
         }
-        return workingDays;
       }
 
-      if (rangeType === "Monthly") {
-        // Count Mon-Fri from Today to end of current month
-        let workingDays = 0;
-        const daysInMonth = new Date(year, month + 1, 0).getDate(); // Last day of month
-
-        // Loop from todayDate to daysInMonth
-        for (let d = todayDate; d <= daysInMonth; d++) {
-          const date = new Date(year, month, d);
-          const day = date.getDay();
-          if (day !== 0 && day !== 6) {
-            workingDays++;
-          }
-        }
-        return workingDays;
-      }
-
-      return 1; // Fallback
+      const d = new Date(s);
+      return !isNaN(d.getTime()) ? d : null;
     };
 
-    const multiplier = getWorkingDaysCount(range);
+    // Helper to calculate working days (Mon-Fri only, excluding Sat & Sun)
+    const getWorkingDaysInRange = (startDate, endDate) => {
+      let count = 0;
+      const cur = new Date(startDate);
+      cur.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(0, 0, 0, 0);
+
+      while (cur <= end) {
+        const day = cur.getDay(); // 0 = Sun, 6 = Sat
+        if (day !== 0 && day !== 6) {
+          count++;
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
+    };
+
+    // Helper to calculate working days for a specific employee within a period window
+    const getEmpDaysForPeriod = (emp, pStart, pEnd) => {
+      let aStart = new Date(pStart);
+      let aEnd = new Date(pEnd);
+
+      if (emp.from_date) {
+        const fDate = parseDate(emp.from_date);
+        if (fDate && fDate > aStart) {
+          aStart = fDate;
+        }
+      }
+
+      if (emp.to_date) {
+        const tDate = parseDate(emp.to_date);
+        if (tDate && tDate < aEnd) {
+          aEnd = tDate;
+        }
+      }
+
+      aStart.setHours(0, 0, 0, 0);
+      aEnd.setHours(0, 0, 0, 0);
+
+      if (aStart > aEnd) return 0;
+      return getWorkingDaysInRange(aStart, aEnd);
+    };
 
     // Initialize metrics
     const metrics = {
       partialHoursDistribution: {},
       clusters: { "MEBM": 0, "M&T": 0, "S&PS Insitu": 0, "S&PS Exsitu": 0 },
       roles: {},
+      today: {
+        totalPartialHours: 0,
+        totalAvailableHours: 0,
+        partialEmployeeCount: 0,
+        availableEmployeeCount: 0
+      },
+      weekly: {
+        totalPartialHours: 0,
+        totalAvailableHours: 0,
+        partialEmployeeCount: 0,
+        availableEmployeeCount: 0
+      },
+      monthly: {
+        totalPartialHours: 0,
+        totalAvailableHours: 0,
+        partialEmployeeCount: 0,
+        availableEmployeeCount: 0
+      },
       totalPartialHours: 0,
       totalAvailableHours: 0,
       partialEmployeeCount: 0,
       availableEmployeeCount: 0
     };
 
+    let availablePeopleCount = 0;
+
     employees.forEach(emp => {
-      // 1. Partial Hours
-      if (emp.availability === "Partially Available" && emp.hours_available) {
+      const avail = (emp.availability || "").toLowerCase();
+
+      // 1. Partial Hours Distribution
+      if (avail === "partially available" && emp.hours_available) {
         const label = String(emp.hours_available).trim();
         metrics.partialHoursDistribution[label] = (metrics.partialHoursDistribution[label] || 0) + 1;
       }
 
       // 2. Clusters (Check both cluster and cluster2)
       const clustersToCheck = [emp.cluster, emp.cluster2];
-
       clustersToCheck.forEach(c => {
         const empCluster = (c || "").trim();
         if (!empCluster) return;
@@ -405,7 +452,6 @@ export const getDashboardMetrics = async (req, res) => {
         if (metrics.clusters.hasOwnProperty(empCluster)) {
           metrics.clusters[empCluster]++;
         } else {
-          // Case-insensitive match
           const key = Object.keys(metrics.clusters).find(k => k.toLowerCase() === empCluster.toLowerCase());
           if (key) {
             metrics.clusters[key]++;
@@ -417,26 +463,52 @@ export const getDashboardMetrics = async (req, res) => {
       const r = (emp.role || "Unknown").trim();
       metrics.roles[r] = (metrics.roles[r] || 0) + 1;
 
-      // 4. Total Capacity Calculation
-      const avail = (emp.availability || "").toLowerCase();
+      // 4. Count Available Employees
+      if (avail === "available") {
+        availablePeopleCount++;
+      }
 
-      // Calculate Base Daily Hours
-      let dailyHours = 0;
+      // 5. Calculate Partially Available Hours per period (removing Sat & Sun)
       if (avail === "partially available" && emp.hours_available) {
         const h = parseFloat(emp.hours_available);
         if (!isNaN(h)) {
-          dailyHours = h;
-          metrics.totalPartialHours = (metrics.totalPartialHours || 0) + (dailyHours * multiplier);
-          metrics.partialEmployeeCount++;
+          const periods = [
+            { key: "today", start: todayStart, end: todayEnd },
+            { key: "weekly", start: weekStart, end: weekEnd },
+            { key: "monthly", start: monthStart, end: monthEnd }
+          ];
+
+          periods.forEach(({ key, start, end }) => {
+            const workDays = getEmpDaysForPeriod(emp, start, end);
+            if (workDays > 0) {
+              metrics[key].totalPartialHours += h * workDays;
+              metrics[key].partialEmployeeCount++;
+            }
+          });
         }
-      } else if (avail === "available") {
-        // Assuming 8 hours/day for full availability
-        dailyHours = 8;
-        metrics.totalAvailableHours = (metrics.totalAvailableHours || 0) + (dailyHours * multiplier);
-        metrics.availableEmployeeCount++;
       }
     });
-    // console.log("Calculated Metrics:", metrics);
+
+    // 6. Set Available Hours using exact formulas:
+    // Today: 8 * N
+    // This Week: 8 * N * 5
+    // This Month: 8 * N * 22
+    metrics.today.availableEmployeeCount = availablePeopleCount;
+    metrics.today.totalAvailableHours = 8 * availablePeopleCount;
+
+    metrics.weekly.availableEmployeeCount = availablePeopleCount;
+    metrics.weekly.totalAvailableHours = 8 * availablePeopleCount * 5;
+
+    metrics.monthly.availableEmployeeCount = availablePeopleCount;
+    metrics.monthly.totalAvailableHours = 8 * availablePeopleCount * 22;
+
+    // Populate top-level fields for backwards compatibility
+    const rangeParam = (req.query.range || "Daily").toLowerCase();
+    const targetKey = rangeParam === "weekly" ? "weekly" : rangeParam === "monthly" ? "monthly" : "today";
+    metrics.totalPartialHours = metrics[targetKey].totalPartialHours;
+    metrics.totalAvailableHours = metrics[targetKey].totalAvailableHours;
+    metrics.partialEmployeeCount = metrics[targetKey].partialEmployeeCount;
+    metrics.availableEmployeeCount = metrics[targetKey].availableEmployeeCount;
 
     res.json(metrics);
   } catch (err) {
