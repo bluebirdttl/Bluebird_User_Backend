@@ -5,17 +5,18 @@ import { sendNotificationToUser } from "./notificationController.js";
 // LOGIN USER
 // ---------------------------
 export const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { username, password } = req.body;
+  const identifier = (username || "").trim();
 
-  if (!email || !password)
-    return res.status(400).json({ error: "Email and password required" });
+  if (!identifier || !password)
+    return res.status(400).json({ error: "Username and password required" });
 
   try {
-    // Supabase search filter
+    // Supabase search filter: match by username
     const { data: users, error } = await supabase
       .from('employees')
-      .select('*, role_type') // Explicitly request role_type to ensure it's returned
-      .eq('email', email);
+      .select('*, role_type')
+      .eq('username', identifier);
 
     if (error) throw error;
 
@@ -30,17 +31,16 @@ export const loginUser = async (req, res) => {
     const safeUser = {
       empid: user.empid,
       name: user.name,
-      email: user.email,
+      username: user.username,
       role: user.role,
       role_type: user.role_type,
-      ...user // DEBUG: Include ALL fields to see what Supabase is actually returning
+      ...user // Include all fields
     };
 
     // Send Notification
-    // console.log("Sending Login Notification to", user.empid);
     sendNotificationToUser(user.empid, {
       title: "New Login Detected",
-      message: `Login detected for ${user.email} at ${new Date().toLocaleTimeString()}`,
+      message: `Login detected for ${user.username || user.name} at ${new Date().toLocaleTimeString()}`,
       url: "/"
     });
 
@@ -59,21 +59,21 @@ export const loginUser = async (req, res) => {
 // SIGNUP USER
 // ---------------------------
 export const signupUser = async (req, res) => {
-  const { email, password, name } = req.body;
+  const { username, password, name } = req.body;
 
-  if (!email || !password || !name)
+  if (!username || !password || !name)
     return res.status(400).json({ error: "All fields required" });
 
   try {
     const { data: existing, error: findError } = await supabase
       .from('employees')
       .select('*')
-      .eq('email', email);
+      .eq('username', username.trim());
 
     if (findError) throw findError;
 
     if (existing.length > 0)
-      return res.status(409).json({ error: "Email already registered" });
+      return res.status(409).json({ error: "Username already registered" });
 
     const empid = `E${String(Date.now()).slice(-6)}`;
 
@@ -84,7 +84,7 @@ export const signupUser = async (req, res) => {
         {
           empid,
           name,
-          email,
+          username: username.trim(),
           password,
           availability: "Occupied",
           hours_available: "",

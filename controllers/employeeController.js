@@ -117,7 +117,7 @@ export const getEmployeeById = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   // console.log("updateEmployee HIT!", req.params, req.body);
   const { empid } = req.params;
-  const profileFields = ["empid", "name", "email", "role", "cluster", "cluster2"];
+  const profileFields = ["empid", "name", "username", "role", "cluster", "cluster2"];
   const detailScalarFields = ["current_project", "availability", "hours_available", "from_date", "to_date", "stars"];
   try {
     // fetch existing
