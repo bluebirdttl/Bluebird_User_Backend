@@ -45,6 +45,7 @@ export const createProject = async (req, res) => {
         let {
             empid,
             project_name,
+            activity_type,
             leader_name,
             required_skills,
             end_date,
@@ -55,10 +56,6 @@ export const createProject = async (req, res) => {
             poc3
         } = req.body;
 
-
-
-
-
         // Ensure required_skills is an array (Supabase handles JSONB automatically if passed as array/object)
         let skillsArray = [];
         if (Array.isArray(required_skills)) {
@@ -67,23 +64,38 @@ export const createProject = async (req, res) => {
             skillsArray = required_skills.split(',').map(s => s.trim()).filter(s => s);
         }
 
-        const { data, error } = await supabase
+        const insertPayload = {
+            empid: empid || 0, // Default to 0 if not provided
+            project_name,
+            leader_name,
+            required_skills: skillsArray,
+            end_date,
+            status,
+            description,
+            poc1,
+            poc2,
+            poc3
+        };
+
+        if (activity_type !== undefined) {
+            insertPayload.activity_type = activity_type || null;
+        }
+
+        let { data, error } = await supabase
             .from('projects')
-            .insert([
-                {
-                    empid: empid || 0, // Default to 0 if not provided
-                    project_name,
-                    leader_name,
-                    required_skills: skillsArray,
-                    end_date,
-                    status,
-                    description,
-                    poc1,
-                    poc2,
-                    poc3
-                }
-            ])
+            .insert([insertPayload])
             .select();
+
+        // Fallback if activity_type column doesn't exist yet in Supabase schema
+        if (error && error.code === 'PGRST204' && error.message?.includes('activity_type')) {
+            delete insertPayload.activity_type;
+            const retry = await supabase
+                .from('projects')
+                .insert([insertPayload])
+                .select();
+            data = retry.data;
+            error = retry.error;
+        }
 
         if (error) throw error;
 
@@ -131,6 +143,7 @@ export const updateProject = async (req, res) => {
         let {
             user_empid,
             project_name,
+            activity_type,
             leader_name,
             required_skills,
             end_date,
@@ -173,13 +186,29 @@ export const updateProject = async (req, res) => {
             poc1,
             poc2,
             poc3
+        };
+
+        if (activity_type !== undefined) {
+            updatePayload.activity_type = activity_type || null;
         }
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('projects')
             .update(updatePayload)
             .eq('id', id)
             .select();
+
+        // Fallback if activity_type column doesn't exist yet in Supabase schema
+        if (error && error.code === 'PGRST204' && error.message?.includes('activity_type')) {
+            delete updatePayload.activity_type;
+            const retry = await supabase
+                .from('projects')
+                .update(updatePayload)
+                .eq('id', id)
+                .select();
+            data = retry.data;
+            error = retry.error;
+        }
 
         if (error) throw error;
 
