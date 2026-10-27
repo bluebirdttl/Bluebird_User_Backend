@@ -79,6 +79,7 @@ export const getAllEmployees = async (req, res) => {
       })
       .map((emp) => ({
         ...emp,
+        current_project: safeJsonParse(emp.current_project),
         current_skills: safeJsonParse(emp.current_skills),
         interests: safeJsonParse(emp.interests),
         previous_projects: safeJsonParse(emp.previous_projects),
@@ -103,6 +104,7 @@ export const getEmployeeById = async (req, res) => {
 
     if (!data || data.length === 0) return res.status(404).json({ error: "Employee not found" });
     const emp = data[0];
+    emp.current_project = safeJsonParse(emp.current_project);
     emp.current_skills = safeJsonParse(emp.current_skills);
     emp.interests = safeJsonParse(emp.interests);
     emp.previous_projects = safeJsonParse(emp.previous_projects);
@@ -118,7 +120,7 @@ export const updateEmployee = async (req, res) => {
   // console.log("updateEmployee HIT!", req.params, req.body);
   const { empid } = req.params;
   const profileFields = ["empid", "name", "username", "role", "cluster", "cluster2"];
-  const detailScalarFields = ["current_project", "availability", "hours_available", "from_date", "to_date", "stars"];
+  const detailScalarFields = ["availability", "hours_available", "from_date", "to_date", "stars"];
   try {
     // fetch existing
     const { data: findData, error: findError } = await supabase
@@ -164,6 +166,10 @@ export const updateEmployee = async (req, res) => {
     });
 
     // DETAIL list fields -> normalize JSON strings
+    if (Object.prototype.hasOwnProperty.call(body, "current_project")) {
+      const val = normalizeListForStore(body.current_project);
+      if (val !== undefined) updatePayload.current_project = val;
+    }
     if (Object.prototype.hasOwnProperty.call(body, "current_skills")) {
       const val = normalizeListForStore(body.current_skills);
       if (val !== undefined) updatePayload.current_skills = val;
@@ -177,7 +183,7 @@ export const updateEmployee = async (req, res) => {
       if (val !== undefined) updatePayload.previous_projects = val;
     }
 
-    // DETAIL scalar fields (current_project kept as plain string)
+    // DETAIL scalar fields
     detailScalarFields.forEach((f) => {
       if (Object.prototype.hasOwnProperty.call(body, f)) {
         if (body[f] === undefined) return;
@@ -185,9 +191,9 @@ export const updateEmployee = async (req, res) => {
       }
     });
 
-    // handle noCurrentProject flag (clear current_project)
+    // handle noCurrentProject flag (clear current_project as empty JSON array)
     if (Object.prototype.hasOwnProperty.call(body, "noCurrentProject")) {
-      if (body.noCurrentProject) updatePayload.current_project = "";
+      if (body.noCurrentProject) updatePayload.current_project = JSON.stringify([]);
     }
 
     // Explicitly handle stars to ensure it's captured
@@ -247,6 +253,7 @@ export const updateEmployee = async (req, res) => {
     // return refreshed row
     const updatedRow = updatedData && updatedData.length > 0 ? updatedData[0] : null;
     if (updatedRow) {
+      updatedRow.current_project = safeJsonParse(updatedRow.current_project);
       updatedRow.current_skills = safeJsonParse(updatedRow.current_skills);
       updatedRow.interests = safeJsonParse(updatedRow.interests);
       updatedRow.previous_projects = safeJsonParse(updatedRow.previous_projects);
