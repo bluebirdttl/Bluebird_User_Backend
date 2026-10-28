@@ -273,30 +273,111 @@ export const updateEmployee = async (req, res) => {
   }
 };
 
-// UPDATE STARS ONLY
+// UPDATE STARS AND RECORD IN manager_stars
 export const updateEmployeeStars = async (req, res) => {
   const { empid } = req.params;
-  const { stars } = req.body;
+  const { stars, manager_id, manager_name, employee_name } = req.body;
 
-  // console.log(`updateEmployeeStars HIT! empid: ${empid}, stars: ${stars}`);
-
-  if (stars === undefined) {
+  if (stars === undefined || stars === null) {
     return res.status(400).json({ error: "Stars value is required" });
   }
 
+  const userEmpId = parseInt(empid, 10);
+  const starsCount = parseInt(stars, 10);
+
+  if (isNaN(starsCount) || starsCount <= 0) {
+    return res.status(400).json({ error: "Stars value must be greater than 0" });
+  }
+
   try {
-    const { data, error } = await supabase
+    // Fetch current stars for the employee to increment
+    const { data: currentEmp, error: fetchError } = await supabase
       .from('employees')
-      .update({ stars })
-      .eq('empid', empid)
+      .select('stars, name')
+      .eq('empid', userEmpId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const currentStars = Number(currentEmp?.stars) || 0;
+    const newTotalStars = currentStars + starsCount;
+
+    // 1. Update employee's stars by adding starsCount
+    const { data: updatedEmployee, error: empError } = await supabase
+      .from('employees')
+      .update({ stars: newTotalStars })
+      .eq('empid', userEmpId)
       .select();
 
-    if (error) throw error;
+    if (empError) throw empError;
 
-    res.json({ success: true, message: "Stars updated successfully", data });
+    // 2. Always record as a NEW ROW in 'manager_stars' table
+    let managerStarRecord = null;
+    const mgrId = manager_id !== undefined && manager_id !== null ? parseInt(manager_id, 10) : null;
+
+    if (mgrId && !isNaN(mgrId) && mgrId > 0) {
+      let resolvedManagerName = manager_name ? String(manager_name).trim() : "";
+      let resolvedEmployeeName = employee_name ? String(employee_name).trim() : (currentEmp?.name || "");
+
+      // Fallback manager name from employees table
+      if (!resolvedManagerName) {
+        const { data: mgrEmp } = await supabase
+          .from('employees')
+          .select('name')
+          .eq('empid', mgrId)
+          .maybeSingle();
+        resolvedManagerName = mgrEmp?.name || `Manager ${mgrId}`;
+      }
+
+      // Fallback employee name
+      if (!resolvedEmployeeName) {
+        resolvedEmployeeName = updatedEmployee?.[0]?.name || `Employee ${userEmpId}`;
+      }
+
+      // Always insert a new row into manager_stars for this transaction
+      const { data: insData, error: insError } = await supabase
+        .from('manager_stars')
+        .insert({
+          manager_id: mgrId,
+          manager_name: resolvedManagerName,
+          user_empid: userEmpId,
+          employee_name: resolvedEmployeeName,
+          stars_given: starsCount
+        })
+        .select();
+
+      if (insError) throw insError;
+      managerStarRecord = insData?.[0] || null;
+    }
+
+    res.json({
+      success: true,
+      message: "Stars updated successfully",
+      data: updatedEmployee,
+      manager_stars: managerStarRecord
+    });
   } catch (err) {
     console.error("Star update error →", err);
-    res.status(500).json({ error: "Failed to update stars" });
+    res.status(500).json({ error: "Failed to update stars", details: err.message || err });
+  }
+};
+
+// GET STARS HISTORY FOR AN EMPLOYEE
+export const getEmployeeStarsHistory = async (req, res) => {
+  const { empid } = req.params;
+  try {
+    const userEmpId = parseInt(empid, 10);
+    const { data, error } = await supabase
+      .from('manager_stars')
+      .select('*')
+      .eq('user_empid', userEmpId)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("Error fetching stars history:", err);
+    res.status(500).json({ error: "Failed to fetch stars history" });
   }
 };
 // GET DASHBOARD METRICS
